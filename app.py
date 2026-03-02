@@ -505,6 +505,7 @@ def update_rnc(id):
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+# ========== ROTA DELETE PARA RNC (ADICIONADA) ==========
 @app.route('/api/rncs/<id>', methods=['DELETE'])
 def delete_rnc(id):
     try:
@@ -660,8 +661,36 @@ def gerar_pdf():
         elements = []
         styles = criar_estilos_pdf()
         
-        # Logo removida - arquivo EMF não é compatível com o servidor
-        # Se quiser adicionar uma logo, use um arquivo PNG e descomente o código abaixo
+        # Adicionar logo se existir
+        logo_path = os.path.join(os.path.dirname(__file__), 'logo.png')
+        if os.path.exists(logo_path):
+            try:
+                # Definir tamanho máximo para a logo (100mm de largura)
+                max_width = 100*mm
+                
+                # Obter dimensões originais para manter proporção
+                img = ImageReader(logo_path)
+                img_width, img_height = img.getSize()
+                
+                # Calcular altura proporcional
+                scale = max_width / img_width
+                new_width = max_width
+                new_height = img_height * scale
+                
+                # Limitar altura máxima se necessário
+                max_height = 30*mm
+                if new_height > max_height:
+                    scale = max_height / new_height
+                    new_width = new_width * scale
+                    new_height = max_height
+                
+                logo = Image(logo_path, width=new_width, height=new_height)
+                logo.hAlign = 'LEFT'  # Alinhar à esquerda
+                elements.append(logo)
+                elements.append(Spacer(1, 5))
+                print(f"✅ Logo redimensionada: {new_width/mm:.1f}mm x {new_height/mm:.1f}mm")
+            except Exception as e:
+                print(f"⚠️ Erro ao carregar logo: {e}")
         
         elements.append(Paragraph("Período de Vigência", styles['TituloPrincipal']))
         elements.append(Paragraph(f"{mes:02d}/{ano}", styles['TituloPrincipal']))
@@ -751,7 +780,35 @@ def gerar_zip():
             elements = []
             styles = criar_estilos_pdf()
             
-            # Logo removida - arquivo EMF não é compatível com o servidor
+            # Adicionar logo se existir
+            logo_path = os.path.join(os.path.dirname(__file__), 'logo.png')
+            if os.path.exists(logo_path):
+                try:
+                    # Definir tamanho máximo para a logo (100mm de largura)
+                    max_width = 100*mm
+                    
+                    # Obter dimensões originais para manter proporção
+                    img = ImageReader(logo_path)
+                    img_width, img_height = img.getSize()
+                    
+                    # Calcular altura proporcional
+                    scale = max_width / img_width
+                    new_width = max_width
+                    new_height = img_height * scale
+                    
+                    # Limitar altura máxima se necessário
+                    max_height = 30*mm
+                    if new_height > max_height:
+                        scale = max_height / new_height
+                        new_width = new_width * scale
+                        new_height = max_height
+                    
+                    logo = Image(logo_path, width=new_width, height=new_height)
+                    logo.hAlign = 'LEFT'  # Alinhar à esquerda
+                    elements.append(logo)
+                    elements.append(Spacer(1, 5))
+                except Exception as e:
+                    print(f"⚠️ Erro ao carregar logo: {e}")
             
             elements.append(Paragraph("Período de Vigência", styles['TituloPrincipal']))
             elements.append(Paragraph(f"{mes_int:02d}/{ano_int}", styles['TituloPrincipal']))
