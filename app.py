@@ -636,7 +636,7 @@ def gerar_pdf():
         styles = criar_estilos_pdf()
         
         # Adicionar logo se existir - redimensionada para caber na página
-        logo_path = os.path.join(os.path.dirname(__file__), 'Logo.emf')
+        logo_path = os.path.join(os.path.dirname(__file__), 'Logo.png')
         if os.path.exists(logo_path):
             try:
                 # Definir tamanho máximo para a logo (100mm de largura)
@@ -830,4 +830,5 @@ if __name__ == '__main__':
     print("📱 Modo PWA ativado - Instale como aplicativo")
     print("🛑 Pressione CTRL+C para parar")
     print("="*60)
+
     app.run(debug=True, port=5000)
