@@ -22,17 +22,22 @@ app = Flask(__name__,
 CORS(app)
 
 # ==================== CONFIGURAÇÃO DO BANCO DE DADOS ====================
-# Busca a URL do ambiente ou usa um valor padrão com tratamento de erro
+# Busca a URL do ambiente ou usa um valor padrão
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if not DATABASE_URL:
-    # Fallback para desenvolvimento - NÃO USE EM PRODUÇÃO
+    # Fallback - NÃO USE EM PRODUÇÃO
     DATABASE_URL = 'postgresql://bank_conciliation_db_user:UYuIrIbfcv9qC2HBF9dzqvEeQydqyWxK@dpg-d6isl8vgi27c73dib1kg-a:5432/bank_conciliation_db?sslmode=require'
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db = SQLAlchemy(app)
 
-print(f"📊 Conectando ao banco de dados: {DATABASE_URL.split('@')[1] if '@' in DATABASE_URL else 'local'}")
+# Inicializa o SQLAlchemy com tratamento de erro
+try:
+    db = SQLAlchemy(app)
+    print("✅ SQLAlchemy inicializado com sucesso")
+except Exception as e:
+    print(f"❌ Erro ao inicializar SQLAlchemy: {e}")
+    db = None
 
 # ==================== MODELOS DO BANCO DE DADOS ====================
 class Saldo(db.Model):
@@ -74,7 +79,7 @@ class RNC(db.Model):
     correcao = db.Column(db.Text, nullable=False)
     mes = db.Column(db.Integer, nullable=False)
     ano = db.Column(db.Integer, nullable=False)
-    expansoes = db.Column(db.JSON, default=[])
+    expansoes = db.Column(JSON, default=[])
     data_registro = db.Column(db.String(50))
 
     def to_dict(self):
@@ -108,6 +113,7 @@ print("🔍 INFORMAÇÕES DO SISTEMA")
 print("="*60)
 print(f"📁 Diretório atual: {os.getcwd()}")
 print(f"📁 EXTRATOS_FOLDER: {EXTRATOS_FOLDER}")
+print(f"🐍 Versão Python: {os.sys.version}")
 print("="*60)
 
 # ==================== FUNÇÕES AUXILIARES ====================
@@ -270,13 +276,16 @@ def criar_tabela_rncs(rncs, styles):
     return tabela
 
 # ==================== CRIAR TABELAS NO BANCO ====================
-with app.app_context():
-    try:
-        db.create_all()
-        print("✅ Tabelas criadas/verificadas no banco de dados")
-    except Exception as e:
-        print(f"❌ Erro ao criar tabelas: {e}")
-        print("⚠️ Verifique a conexão com o banco de dados")
+if db is not None:
+    with app.app_context():
+        try:
+            db.create_all()
+            print("✅ Tabelas criadas/verificadas no banco de dados")
+        except Exception as e:
+            print(f"❌ Erro ao criar tabelas: {e}")
+            print("⚠️ Verifique a conexão com o banco de dados")
+else:
+    print("⚠️ Banco de dados não inicializado. Pulando criação de tabelas.")
 
 # ==================== ROTAS PRINCIPAIS ====================
 @app.route('/')
