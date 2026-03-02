@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saldos Bancários</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="page-content">
+        <div class="page-header">
+            <h2>Saldos Bancários</h2>
+            <button class="add-btn" onclick="abrirModalSaldo()">+ Novo Saldo</button>
+        </div>
+
+        <table class="data-table" id="tabelaSaldos">
+            <thead>
+                <tr>
+                    <th>Banco</th>
+                    <th>Empresa</th>
+                    <th>Saldo SAGI</th>
+                    <th>Saldo Banco</th>
+                    <th>Diferença</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody id="saldosBody">
+                <!-- Dados serão inseridos via JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Modal de Novo Saldo -->
+    <div id="modalSaldo" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="fecharModalSaldo()">&times;</span>
+            <h3>Novo Saldo Bancário</h3>
+            
+            <form id="formSaldo">
+                <div class="form-group">
+                    <label>Banco:</label>
+                    <select id="bancoSelect" required>
+                        <option value="ITAÚ">ITAÚ</option>
+                        <option value="BANCO DO BRASIL">BANCO DO BRASIL</option>
+                        <option value="BRADESCO">BRADESCO</option>
+                        <option value="SANTANDER">SANTANDER</option>
+                        <option value="CAIXA">CAIXA</option>
+                        <option value="SICOOB">SICOOB</option>
+                        <option value="BTG">BTG</option>
+                        <option value="INTER">INTER</option>
+                        <option value="NUBANK">NUBANK</option>
+                        <option value="DINHEIRO">DINHEIRO</option>
+                        <option value="CHEQUES">CHEQUES</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Empresa:</label>
+                    <select id="empresaSelect" required>
+                        <option value="MDR">MDR</option>
+                        <option value="SG">SG</option>
+                        <option value="SÔNIA">SÔNIA</option>
+                        <option value="IMBIRUÇU">IMBIRUÇU</option>
+                        <option value="DE TERCEIRO">DE TERCEIRO</option>
+                        <option value="FÍSICO">FÍSICO</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Mês:</label>
+                    <select id="saldoMesSelect" required>
+                        <option value="1">Janeiro</option>
+                        <option value="2">Fevereiro</option>
+                        <option value="3">Março</option>
+                        <option value="4">Abril</option>
+                        <option value="5">Maio</option>
+                        <option value="6">Junho</option>
+                        <option value="7">Julho</option>
+                        <option value="8">Agosto</option>
+                        <option value="9">Setembro</option>
+                        <option value="10">Outubro</option>
+                        <option value="11">Novembro</option>
+                        <option value="12">Dezembro</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Ano:</label>
+                    <select id="saldoAnoSelect" required>
+                        <option value="2026">2026</option>
+                        <option value="2027">2027</option>
+                        <option value="2028">2028</option>
+                        <option value="2029">2029</option>
+                        <option value="2030">2030</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Saldo SAGI (R$):</label>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="number" id="saldoSagi" step="0.01" min="0" style="flex: 1;" required>
+                        <label style="display: flex; align-items: center; gap: 5px;">
+                            <input type="checkbox" id="saldoSagiNegativo"> Negativo
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Saldo Banco (R$):</label>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="number" id="saldoBanco" step="0.01" min="0" style="flex: 1;" required>
+                        <label style="display: flex; align-items: center; gap: 5px;">
+                            <input type="checkbox" id="saldoBancoNegativo"> Negativo
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Diferença:</label>
+                    <input type="text" id="diferenca" readonly>
+                </div>
+
+                <div class="form-group">
+                    <label>Averbação:</label>
+                    <input type="text" id="averbacao" placeholder="Observações">
+                </div>
+
+                <button type="submit" class="submit-btn">Registrar</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/js/saldos.js"></script>
+</body>
+</html>

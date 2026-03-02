@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RNC - Não Conformidades</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="page-content">
+        <div class="page-header">
+            <h2>Registro de Não Conformidades</h2>
+            <button class="add-btn" onclick="abrirModalRNC()">+ Nova RNC</button>
+        </div>
+
+        <table class="data-table" id="tabelaRNC">
+            <thead>
+                <tr>
+                    <th>Banco</th>
+                    <th>Empresa</th>
+                    <th>Data</th>
+                    <th>Documento</th>
+                    <th>Valor</th>
+                    <th>Pessoa</th>
+                    <th>Tipo</th>
+                    <th>Motivo</th>
+                    <th>Correção</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody id="rncBody">
+                <!-- Dados serão inseridos via JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Modal de Nova/Editar RNC -->
+    <div id="modalRNC" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="fecharModalRNC()">&times;</span>
+            <h3 id="modalRNCtitulo">Nova Não Conformidade</h3>
+            
+            <form id="formRNC">
+                <input type="hidden" id="rncId" value="">
+                
+                <div class="form-group">
+                    <label>Banco:</label>
+                    <select id="rncBancoSelect" required>
+                        <option value="ITAÚ">ITAÚ</option>
+                        <option value="BANCO DO BRASIL">BANCO DO BRASIL</option>
+                        <option value="BRADESCO">BRADESCO</option>
+                        <option value="SANTANDER">SANTANDER</option>
+                        <option value="CAIXA">CAIXA</option>
+                        <option value="SICOOB">SICOOB</option>
+                        <option value="BTG">BTG</option>
+                        <option value="INTER">INTER</option>
+                        <option value="NUBANK">NUBANK</option>
+                        <option value="DINHEIRO">DINHEIRO</option>
+                        <option value="CHEQUES">CHEQUES</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Empresa:</label>
+                    <select id="rncEmpresaSelect" required>
+                        <option value="MDR">MDR</option>
+                        <option value="SG">SG</option>
+                        <option value="SÔNIA">SÔNIA</option>
+                        <option value="IMBIRUÇU">IMBIRUÇU</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Mês:</label>
+                    <select id="rncMesSelect" required>
+                        <option value="1">Janeiro</option>
+                        <option value="2">Fevereiro</option>
+                        <option value="3">Março</option>
+                        <option value="4">Abril</option>
+                        <option value="5">Maio</option>
+                        <option value="6">Junho</option>
+                        <option value="7">Julho</option>
+                        <option value="8">Agosto</option>
+                        <option value="9">Setembro</option>
+                        <option value="10">Outubro</option>
+                        <option value="11">Novembro</option>
+                        <option value="12">Dezembro</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Ano:</label>
+                    <select id="rncAnoSelect" required>
+                        <option value="2026">2026</option>
+                        <option value="2027">2027</option>
+                        <option value="2028">2028</option>
+                        <option value="2029">2029</option>
+                        <option value="2030">2030</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Data:</label>
+                    <input type="date" id="rncData" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Documento:</label>
+                    <input type="text" id="rncDocumento" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Valor (R$):</label>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="number" id="rncValor" step="0.01" min="0" style="flex: 1;" required>
+                        <label style="display: flex; align-items: center; gap: 5px;">
+                            <input type="checkbox" id="rncValorNegativo"> Negativo
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Pessoa:</label>
+                    <input type="text" id="rncPessoa" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Tipo:</label>
+                    <select id="rncTipo" required>
+                        <option value="A PAGAR">A PAGAR</option>
+                        <option value="A RECEBER">A RECEBER</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Motivo:</label>
+                    <textarea id="rncMotivo" rows="2" required></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Correção:</label>
+                    <textarea id="rncCorrecao" rows="2" required></textarea>
+                </div>
+
+                <button type="submit" class="submit-btn" id="rncSubmitBtn">Registrar</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal de Expansão -->
+    <div id="modalExpansao" class="modal">
+        <div class="modal-content modal-lg">
+            <span class="close" onclick="fecharModalExpansao()">&times;</span>
+            <h3>Detalhes da RNC</h3>
+            
+            <table class="expansao-table">
+                <thead>
+                    <tr>
+                        <th>Solicitação</th>
+                        <th>Data Sol.</th>
+                        <th>Setor</th>
+                        <th>Data Dev.</th>
+                        <th>Devolutiva</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="expansoesBody">
+                    <!-- Expansões serão inseridas aqui -->
+                </tbody>
+            </table>
+            
+            <button class="add-expansao-btn" onclick="adicionarExpansao()">+ Adicionar registro</button>
+        </div>
+    </div>
+
+    <script src="/static/js/rnc.js"></script>
+</body>
+</html>
