@@ -15,7 +15,6 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
 from werkzeug.utils import secure_filename
-import sys
 
 app = Flask(__name__, 
             static_folder='static',
@@ -23,10 +22,17 @@ app = Flask(__name__,
 CORS(app)
 
 # ==================== CONFIGURAÇÃO DO BANCO DE DADOS ====================
-# COLE AQUI SUA URL DO BANCO (SUBSTITUA PELA SUA)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://bank_conciliation_db_user:UYuIrIbfcv9qC2HBF9dzqvEeQydqyWxK@dpg-d6isl8vgi27c73dib1kg-a/bank_conciliation_db'
+# Busca a URL do ambiente ou usa um valor padrão com tratamento de erro
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if not DATABASE_URL:
+    # Fallback para desenvolvimento - NÃO USE EM PRODUÇÃO
+    DATABASE_URL = 'postgresql://bank_conciliation_db_user:UYuIrIbfcv9qC2HBF9dzqvEeQydqyWxK@dpg-d6isl8vgi27c73dib1kg-a:5432/bank_conciliation_db?sslmode=require'
+
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+
+print(f"📊 Conectando ao banco de dados: {DATABASE_URL.split('@')[1] if '@' in DATABASE_URL else 'local'}")
 
 # ==================== MODELOS DO BANCO DE DADOS ====================
 class Saldo(db.Model):
@@ -68,7 +74,7 @@ class RNC(db.Model):
     correcao = db.Column(db.Text, nullable=False)
     mes = db.Column(db.Integer, nullable=False)
     ano = db.Column(db.Integer, nullable=False)
-    expansoes = db.Column(JSON, default=[])
+    expansoes = db.Column(db.JSON, default=[])
     data_registro = db.Column(db.String(50))
 
     def to_dict(self):
@@ -265,8 +271,12 @@ def criar_tabela_rncs(rncs, styles):
 
 # ==================== CRIAR TABELAS NO BANCO ====================
 with app.app_context():
-    db.create_all()
-    print("✅ Tabelas criadas/verificadas no banco de dados")
+    try:
+        db.create_all()
+        print("✅ Tabelas criadas/verificadas no banco de dados")
+    except Exception as e:
+        print(f"❌ Erro ao criar tabelas: {e}")
+        print("⚠️ Verifique a conexão com o banco de dados")
 
 # ==================== ROTAS PRINCIPAIS ====================
 @app.route('/')
