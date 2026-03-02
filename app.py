@@ -22,7 +22,7 @@ app = Flask(__name__,
 CORS(app)
 
 # ==================== CONFIGURAÇÃO DE CAMINHOS ====================
-# Usar caminhos relativos para funcionar no Netlify
+# Usar caminhos relativos para funcionar no Render
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE = os.path.join(BASE_DIR, 'data.json')
 EXTRATOS_FOLDER = os.path.join(BASE_DIR, 'extratos')
@@ -505,6 +505,31 @@ def update_rnc(id):
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/rncs/<id>', methods=['DELETE'])
+def delete_rnc(id):
+    try:
+        print(f"\n🗑️ Deletando RNC ID: {id}")
+        db = load_data()
+        
+        # Encontrar e remover a RNC
+        rncs_anteriores = len(db.get('rncs', []))
+        db['rncs'] = [r for r in db.get('rncs', []) if r.get('id') != id]
+        rncs_removidas = rncs_anteriores - len(db['rncs'])
+        
+        if rncs_removidas == 0:
+            return jsonify({'error': 'RNC não encontrada'}), 404
+        
+        if save_data(db):
+            print(f"✅ RNC {id} deletada com sucesso!")
+            return jsonify({'success': True})
+        else:
+            return jsonify({'error': 'Erro ao salvar dados'}), 500
+            
+    except Exception as e:
+        print(f"❌ Erro ao deletar RNC: {e}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/rncs/<id>/expansoes', methods=['POST'])
 def add_expansao(id):
     try:
@@ -635,36 +660,8 @@ def gerar_pdf():
         elements = []
         styles = criar_estilos_pdf()
         
-        # Adicionar logo se existir - redimensionada para caber na página
-        logo_path = os.path.join(os.path.dirname(__file__), 'Logo.png')
-        if os.path.exists(logo_path):
-            try:
-                # Definir tamanho máximo para a logo (100mm de largura)
-                max_width = 100*mm
-                
-                # Obter dimensões originais para manter proporção
-                img = ImageReader(logo_path)
-                img_width, img_height = img.getSize()
-                
-                # Calcular altura proporcional
-                scale = max_width / img_width
-                new_width = max_width
-                new_height = img_height * scale
-                
-                # Limitar altura máxima se necessário
-                max_height = 30*mm
-                if new_height > max_height:
-                    scale = max_height / new_height
-                    new_width = new_width * scale
-                    new_height = max_height
-                
-                logo = Image(logo_path, width=new_width, height=new_height)
-                logo.hAlign = 'LEFT'  # Alinhar à esquerda
-                elements.append(logo)
-                elements.append(Spacer(1, 5))
-                print(f"✅ Logo redimensionada: {new_width/mm:.1f}mm x {new_height/mm:.1f}mm")
-            except Exception as e:
-                print(f"⚠️ Erro ao carregar logo: {e}")
+        # Logo removida - arquivo EMF não é compatível com o servidor
+        # Se quiser adicionar uma logo, use um arquivo PNG e descomente o código abaixo
         
         elements.append(Paragraph("Período de Vigência", styles['TituloPrincipal']))
         elements.append(Paragraph(f"{mes:02d}/{ano}", styles['TituloPrincipal']))
@@ -754,35 +751,7 @@ def gerar_zip():
             elements = []
             styles = criar_estilos_pdf()
             
-            # Adicionar logo se existir - redimensionada para caber na página
-            logo_path = os.path.join(os.path.dirname(__file__), 'Logo.png')
-            if os.path.exists(logo_path):
-                try:
-                    # Definir tamanho máximo para a logo (100mm de largura)
-                    max_width = 100*mm
-                    
-                    # Obter dimensões originais para manter proporção
-                    img = ImageReader(logo_path)
-                    img_width, img_height = img.getSize()
-                    
-                    # Calcular altura proporcional
-                    scale = max_width / img_width
-                    new_width = max_width
-                    new_height = img_height * scale
-                    
-                    # Limitar altura máxima se necessário
-                    max_height = 30*mm
-                    if new_height > max_height:
-                        scale = max_height / new_height
-                        new_width = new_width * scale
-                        new_height = max_height
-                    
-                    logo = Image(logo_path, width=new_width, height=new_height)
-                    logo.hAlign = 'LEFT'  # Alinhar à esquerda
-                    elements.append(logo)
-                    elements.append(Spacer(1, 5))
-                except Exception as e:
-                    print(f"⚠️ Erro ao carregar logo: {e}")
+            # Logo removida - arquivo EMF não é compatível com o servidor
             
             elements.append(Paragraph("Período de Vigência", styles['TituloPrincipal']))
             elements.append(Paragraph(f"{mes_int:02d}/{ano_int}", styles['TituloPrincipal']))
@@ -818,18 +787,18 @@ def gerar_zip():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
+# ==================== CONFIGURAÇÃO PARA RENDER ====================
+application = app
+
 if __name__ == '__main__':
     print("\n" + "="*60)
-    print("🚀 SISTEMA DE CONCILIAÇÃO BANCÁRIA - PWA")
+    print("🚀 SISTEMA DE CONCILIAÇÃO BANCÁRIA")
     print("="*60)
     print(f"📁 DATA_FILE: {DATA_FILE}")
     print(f"📁 EXTRATOS_FOLDER: {EXTRATOS_FOLDER}")
     print(f"📁 O arquivo data.json existe? {os.path.exists(DATA_FILE)}")
     print("="*60)
     print("🌐 Servidor iniciado em: http://localhost:5000")
-    print("📱 Modo PWA ativado - Instale como aplicativo")
     print("🛑 Pressione CTRL+C para parar")
     print("="*60)
-
     app.run(debug=True, port=5000)
-
