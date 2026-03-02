@@ -1,5 +1,7 @@
 from flask import Flask, request, jsonify, send_file, render_template, send_from_directory
 from flask_cors import CORS
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import JSON
 import json
 import os
 from datetime import datetime
@@ -10,9 +12,8 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import mm, cm
+from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
-import shutil
 from werkzeug.utils import secure_filename
 import sys
 
@@ -21,94 +22,100 @@ app = Flask(__name__,
             template_folder='templates')
 CORS(app)
 
+# ==================== CONFIGURAÇÃO DO BANCO DE DADOS ====================
+# COLE AQUI SUA URL DO BANCO (SUBSTITUA PELA SUA)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://bank_conciliation_db_user:UYuIrIbfcv9qC2HBF9dzqvEeQydqyWxK@dpg-d6isl8vgi27c73dib1kg-a/bank_conciliation_db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+# ==================== MODELOS DO BANCO DE DADOS ====================
+class Saldo(db.Model):
+    __tablename__ = 'saldos'
+    id = db.Column(db.String(50), primary_key=True)
+    banco = db.Column(db.String(50), nullable=False)
+    empresa = db.Column(db.String(50), nullable=False)
+    saldo_sagi = db.Column(db.Float, nullable=False)
+    saldo_banco = db.Column(db.Float, nullable=False)
+    mes = db.Column(db.Integer, nullable=False)
+    ano = db.Column(db.Integer, nullable=False)
+    averbacao = db.Column(db.String(200))
+    data_registro = db.Column(db.String(50))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'banco': self.banco,
+            'empresa': self.empresa,
+            'saldo_sagi': self.saldo_sagi,
+            'saldo_banco': self.saldo_banco,
+            'mes': self.mes,
+            'ano': self.ano,
+            'averbacao': self.averbacao,
+            'data_registro': self.data_registro
+        }
+
+class RNC(db.Model):
+    __tablename__ = 'rncs'
+    id = db.Column(db.String(50), primary_key=True)
+    banco = db.Column(db.String(50), nullable=False)
+    empresa = db.Column(db.String(50))
+    data_rnc = db.Column(db.String(20), nullable=False)
+    documento = db.Column(db.String(50), nullable=False)
+    valor = db.Column(db.Float, nullable=False)
+    pessoa = db.Column(db.String(100), nullable=False)
+    tipo = db.Column(db.String(20), nullable=False)
+    motivo = db.Column(db.Text, nullable=False)
+    correcao = db.Column(db.Text, nullable=False)
+    mes = db.Column(db.Integer, nullable=False)
+    ano = db.Column(db.Integer, nullable=False)
+    expansoes = db.Column(JSON, default=[])
+    data_registro = db.Column(db.String(50))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'banco': self.banco,
+            'empresa': self.empresa,
+            'data_rnc': self.data_rnc,
+            'documento': self.documento,
+            'valor': self.valor,
+            'pessoa': self.pessoa,
+            'tipo': self.tipo,
+            'motivo': self.motivo,
+            'correcao': self.correcao,
+            'mes': self.mes,
+            'ano': self.ano,
+            'expansoes': self.expansoes if self.expansoes else [],
+            'data_registro': self.data_registro
+        }
+
 # ==================== CONFIGURAÇÃO DE CAMINHOS ====================
-# Usar caminhos relativos para funcionar no Render
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_FILE = os.path.join(BASE_DIR, 'data.json')
 EXTRATOS_FOLDER = os.path.join(BASE_DIR, 'extratos')
 ALLOWED_EXTENSIONS = {'pdf'}
+
+# Garantir que a pasta de extratos exista
+os.makedirs(EXTRATOS_FOLDER, exist_ok=True)
 
 print("="*60)
 print("🔍 INFORMAÇÕES DO SISTEMA")
 print("="*60)
 print(f"📁 Diretório atual: {os.getcwd()}")
-print(f"📁 Local do app.py: {os.path.dirname(os.path.abspath(__file__))}")
-print(f"📄 DATA_FILE: {DATA_FILE}")
 print(f"📁 EXTRATOS_FOLDER: {EXTRATOS_FOLDER}")
-print(f"📁 O arquivo existe? {os.path.exists(DATA_FILE)}")
 print("="*60)
 
-# Garantir que as pastas existam
-os.makedirs(EXTRATOS_FOLDER, exist_ok=True)
-
 # ==================== FUNÇÕES AUXILIARES ====================
-
-def load_data():
-    """Carrega dados do JSON com verificação de existência"""
-    try:
-        if os.path.exists(DATA_FILE):
-            print(f"📂 Arquivo data.json encontrado")
-            with open(DATA_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                print(f"✅ Dados carregados: {len(data.get('saldos', []))} saldos, {len(data.get('rncs', []))} RNCs")
-                return data
-        else:
-            print(f"⚠️ Arquivo data.json NÃO encontrado!")
-            print(f"📝 Criando novo arquivo data.json...")
-            
-            # Garantir que o diretório existe
-            os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
-            
-            # Cria um arquivo vazio
-            initial_data = {'saldos': [], 'rncs': []}
-            with open(DATA_FILE, 'w', encoding='utf-8') as f:
-                json.dump(initial_data, f, indent=2, ensure_ascii=False)
-            
-            print(f"✅ Arquivo criado em: {DATA_FILE}")
-            return initial_data
-    except Exception as e:
-        print(f"❌ Erro ao carregar dados: {e}")
-        traceback.print_exc()
-        return {'saldos': [], 'rncs': []}
-
-def save_data(data):
-    """Salva dados no JSON com verificação"""
-    try:
-        print(f"💾 Salvando dados...")
-        
-        # Garantir que o diretório existe
-        os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
-        
-        with open(DATA_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False, default=str)
-        
-        # Verifica se o arquivo foi realmente criado
-        if os.path.exists(DATA_FILE):
-            file_size = os.path.getsize(DATA_FILE)
-            print(f"✅ Dados salvos com sucesso! ({file_size} bytes)")
-        else:
-            print(f"❌ Arquivo NÃO foi criado!")
-            
-        return True
-    except Exception as e:
-        print(f"❌ Erro ao salvar dados: {e}")
-        traceback.print_exc()
-        return False
-
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # ==================== FUNÇÕES DE FORMATAÇÃO PARA PDF ====================
-
 def formatar_valor_pdf(valor):
-    """Formata valor para exibição no PDF com sinal de menos para valores negativos"""
     if valor < 0:
         return f"-R$ {abs(valor):,.2f}".replace('.', ',')
     else:
         return f"R$ {valor:,.2f}".replace('.', ',')
 
 def criar_estilos_pdf():
-    """Cria os estilos personalizados para o PDF"""
     styles = getSampleStyleSheet()
     
     styles.add(ParagraphStyle(
@@ -117,7 +124,7 @@ def criar_estilos_pdf():
         fontName='Helvetica-Bold',
         fontSize=18,
         textColor=colors.HexColor('#002060'),
-        alignment=1,  # Centralizado
+        alignment=1,
         spaceAfter=10,
         spaceBefore=10
     ))
@@ -128,7 +135,7 @@ def criar_estilos_pdf():
         fontName='Helvetica-Bold',
         fontSize=16,
         textColor=colors.HexColor('#002060'),
-        alignment=1,  # Centralizado
+        alignment=1,
         spaceAfter=15,
         spaceBefore=20
     ))
@@ -139,7 +146,7 @@ def criar_estilos_pdf():
         fontName='Helvetica',
         fontSize=10,
         textColor=colors.HexColor('#002060'),
-        alignment=0,  # Esquerda
+        alignment=0,
         spaceAfter=3,
         leftIndent=2,
         wordWrap='CJK'
@@ -151,34 +158,31 @@ def criar_estilos_pdf():
         fontName='Helvetica',
         fontSize=10,
         textColor=colors.HexColor('#002060'),
-        alignment=1,  # Centralizado
+        alignment=1,
         spaceAfter=5
     ))
     
     return styles
 
 def criar_tabela_saldos(saldos, styles):
-    """Cria a tabela de saldos com larguras adequadas"""
     if not saldos:
         return Paragraph("Nenhum saldo registrado para este período.", styles['TextoCentralizado'])
     
     dados = [['Banco', 'Empresa', 'Saldo SAGI', 'Saldo Banco', 'Diferença']]
     
     for s in saldos:
-        diferenca = s['saldo_banco'] - s['saldo_sagi']
+        diferenca = s.saldo_banco - s.saldo_sagi
         
         linha = [
-            Paragraph(s['banco'], styles['TextoNormal']),
-            Paragraph(s['empresa'], styles['TextoNormal']),
-            Paragraph(formatar_valor_pdf(s['saldo_sagi']), styles['TextoNormal']),
-            Paragraph(formatar_valor_pdf(s['saldo_banco']), styles['TextoNormal']),
+            Paragraph(s.banco, styles['TextoNormal']),
+            Paragraph(s.empresa, styles['TextoNormal']),
+            Paragraph(formatar_valor_pdf(s.saldo_sagi), styles['TextoNormal']),
+            Paragraph(formatar_valor_pdf(s.saldo_banco), styles['TextoNormal']),
             Paragraph(formatar_valor_pdf(diferenca), styles['TextoNormal'])
         ]
         dados.append(linha)
     
-    # Larguras das colunas para landscape
-    col_widths = [50*mm, 40*mm, 50*mm, 50*mm, 50*mm]  # Total: 240mm
-    
+    col_widths = [50*mm, 40*mm, 50*mm, 50*mm, 50*mm]
     tabela = Table(dados, colWidths=col_widths, repeatRows=1)
     
     estilo_tabela = [
@@ -202,11 +206,9 @@ def criar_tabela_saldos(saldos, styles):
     ]
     
     tabela.setStyle(TableStyle(estilo_tabela))
-    
     return tabela
 
 def criar_tabela_rncs(rncs, styles):
-    """Cria a tabela de RNCs com larguras adequadas"""
     if not rncs:
         return Paragraph("Nenhuma não conformidade registrada para este período.", styles['TextoCentralizado'])
     
@@ -214,31 +216,28 @@ def criar_tabela_rncs(rncs, styles):
     
     for r in rncs:
         try:
-            # CORREÇÃO: Lidar com ambos os formatos de data
-            data_rnc = r['data_rnc']
+            data_rnc = r.data_rnc
             if 'T' in data_rnc:
                 data_obj = datetime.fromisoformat(data_rnc.split('T')[0])
             else:
                 data_obj = datetime.fromisoformat(data_rnc)
             data = data_obj.strftime('%d/%m/%Y')
         except:
-            data = r['data_rnc'][:10] if r['data_rnc'] else ''
+            data = r.data_rnc[:10] if r.data_rnc else ''
         
         linha = [
-            Paragraph(r['banco'], styles['TextoNormal']),
-            Paragraph(r.get('empresa', ''), styles['TextoNormal']),
+            Paragraph(r.banco, styles['TextoNormal']),
+            Paragraph(r.empresa or '', styles['TextoNormal']),
             Paragraph(data, styles['TextoNormal']),
-            Paragraph(r['documento'], styles['TextoNormal']),
-            Paragraph(formatar_valor_pdf(r['valor']), styles['TextoNormal']),
-            Paragraph(r['tipo'], styles['TextoNormal']),
-            Paragraph(r['motivo'], styles['TextoNormal']),
-            Paragraph(r['correcao'], styles['TextoNormal'])
+            Paragraph(r.documento, styles['TextoNormal']),
+            Paragraph(formatar_valor_pdf(r.valor), styles['TextoNormal']),
+            Paragraph(r.tipo, styles['TextoNormal']),
+            Paragraph(r.motivo, styles['TextoNormal']),
+            Paragraph(r.correcao, styles['TextoNormal'])
         ]
         dados.append(linha)
     
-    # Larguras das colunas para landscape
-    col_widths = [30*mm, 25*mm, 22*mm, 30*mm, 30*mm, 25*mm, 40*mm, 40*mm]  # Total: 242mm
-    
+    col_widths = [30*mm, 25*mm, 22*mm, 30*mm, 30*mm, 25*mm, 40*mm, 40*mm]
     tabela = Table(dados, colWidths=col_widths, repeatRows=1)
     
     estilo_tabela = [
@@ -262,11 +261,14 @@ def criar_tabela_rncs(rncs, styles):
     ]
     
     tabela.setStyle(TableStyle(estilo_tabela))
-    
     return tabela
 
-# ==================== ROTAS PRINCIPAIS ====================
+# ==================== CRIAR TABELAS NO BANCO ====================
+with app.app_context():
+    db.create_all()
+    print("✅ Tabelas criadas/verificadas no banco de dados")
 
+# ==================== ROTAS PRINCIPAIS ====================
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -288,7 +290,6 @@ def serve_static(filename):
     return send_from_directory('static', filename)
 
 # ==================== ROTAS DE SALDOS ====================
-
 @app.route('/api/saldos', methods=['GET', 'POST'])
 def handle_saldos():
     if request.method == 'POST':
@@ -298,31 +299,25 @@ def handle_saldos():
             data = request.json
             print(f"Dados recebidos: {json.dumps(data, indent=2, ensure_ascii=False)}")
             
-            db = load_data()
+            novo_saldo = Saldo(
+                id=str(int(datetime.now().timestamp() * 1000)),
+                banco=data['banco'],
+                empresa=data['empresa'],
+                saldo_sagi=float(data['saldo_sagi']),
+                saldo_banco=float(data['saldo_banco']),
+                mes=int(data['mes']),
+                ano=int(data['ano']),
+                averbacao=data.get('averbacao', ''),
+                data_registro=datetime.now().isoformat()
+            )
             
-            novo_saldo = {
-                'id': str(int(datetime.now().timestamp() * 1000)),
-                'banco': data['banco'],
-                'empresa': data['empresa'],
-                'saldo_sagi': float(data['saldo_sagi']),
-                'saldo_banco': float(data['saldo_banco']),
-                'mes': int(data['mes']),
-                'ano': int(data['ano']),
-                'averbacao': data.get('averbacao', ''),
-                'data_registro': datetime.now().isoformat()
-            }
-            
-            if 'saldos' not in db:
-                db['saldos'] = []
-            db['saldos'].append(novo_saldo)
-            
-            if save_data(db):
-                print("✅ Saldo salvo com sucesso!")
-                return jsonify(novo_saldo)
-            else:
-                return jsonify({'error': 'Erro ao salvar dados'}), 500
+            db.session.add(novo_saldo)
+            db.session.commit()
+            print("✅ Saldo salvo com sucesso!")
+            return jsonify(novo_saldo.to_dict())
                 
         except Exception as e:
+            db.session.rollback()
             print(f"❌ Erro ao criar saldo: {e}")
             traceback.print_exc()
             return jsonify({'error': str(e)}), 500
@@ -333,13 +328,10 @@ def handle_saldos():
             ano = request.args.get('ano', type=int)
             print(f"\n📋 Buscando saldos para mês={mes}, ano={ano}")
             
-            db = load_data()
-            
-            saldos_filtrados = [s for s in db.get('saldos', []) 
-                              if s['mes'] == mes and s['ano'] == ano]
+            saldos_filtrados = Saldo.query.filter_by(mes=mes, ano=ano).all()
             print(f"✅ Encontrados {len(saldos_filtrados)} saldos")
             
-            return jsonify(saldos_filtrados)
+            return jsonify([s.to_dict() for s in saldos_filtrados])
         except Exception as e:
             print(f"❌ Erro ao buscar saldos: {e}")
             return jsonify([]), 200
@@ -348,17 +340,20 @@ def handle_saldos():
 def delete_saldo(id):
     try:
         print(f"\n🗑️ Deletando saldo ID: {id}")
-        db = load_data()
-        db['saldos'] = [s for s in db.get('saldos', []) if s['id'] != id]
-        save_data(db)
-        print("✅ Saldo deletado com sucesso!")
-        return jsonify({'success': True})
+        saldo = Saldo.query.get(id)
+        if saldo:
+            db.session.delete(saldo)
+            db.session.commit()
+            print("✅ Saldo deletado com sucesso!")
+            return jsonify({'success': True})
+        else:
+            return jsonify({'error': 'Saldo não encontrado'}), 404
     except Exception as e:
+        db.session.rollback()
         print(f"❌ Erro ao deletar saldo: {e}")
         return jsonify({'error': str(e)}), 500
 
 # ==================== ROTAS DE RNC ====================
-
 @app.route('/api/rncs', methods=['GET', 'POST'])
 def handle_rncs():
     if request.method == 'POST':
@@ -368,48 +363,38 @@ def handle_rncs():
             data = request.json
             print(f"Dados recebidos: {json.dumps(data, indent=2, ensure_ascii=False)}")
             
-            db = load_data()
-            
-            # CORREÇÃO: Processar a data corretamente
             data_rnc = data['data_rnc']
             if 'T' in data_rnc:
                 data_rnc = data_rnc.split('T')[0]
             
-            # Extrair mês e ano da data
             data_parts = data_rnc.split('-')
             mes = int(data_parts[1])
             ano = int(data_parts[0])
             
-            nova_rnc = {
-                'id': str(int(datetime.now().timestamp() * 1000)),
-                'banco': data['banco'],
-                'empresa': data.get('empresa', ''),
-                'data_rnc': data_rnc,  # Formato YYYY-MM-DD
-                'documento': data['documento'],
-                'valor': float(data['valor']),
-                'pessoa': data['pessoa'],
-                'tipo': data['tipo'],
-                'motivo': data['motivo'],
-                'correcao': data['correcao'],
-                'mes': mes,
-                'ano': ano,
-                'expansoes': [],
-                'data_registro': datetime.now().isoformat()
-            }
+            nova_rnc = RNC(
+                id=str(int(datetime.now().timestamp() * 1000)),
+                banco=data['banco'],
+                empresa=data.get('empresa', ''),
+                data_rnc=data_rnc,
+                documento=data['documento'],
+                valor=float(data['valor']),
+                pessoa=data['pessoa'],
+                tipo=data['tipo'],
+                motivo=data['motivo'],
+                correcao=data['correcao'],
+                mes=mes,
+                ano=ano,
+                expansoes=[],
+                data_registro=datetime.now().isoformat()
+            )
             
-            print(f"Nova RNC criada: ID={nova_rnc['id']}")
-            
-            if 'rncs' not in db:
-                db['rncs'] = []
-            db['rncs'].append(nova_rnc)
-            
-            if save_data(db):
-                print("✅ RNC salva com sucesso!")
-                return jsonify(nova_rnc)
-            else:
-                return jsonify({'error': 'Erro ao salvar dados'}), 500
+            db.session.add(nova_rnc)
+            db.session.commit()
+            print("✅ RNC salva com sucesso!")
+            return jsonify(nova_rnc.to_dict())
                 
         except Exception as e:
+            db.session.rollback()
             print(f"❌ Erro ao criar RNC: {e}")
             traceback.print_exc()
             return jsonify({'error': str(e)}), 500
@@ -420,13 +405,10 @@ def handle_rncs():
             ano = request.args.get('ano', type=int)
             print(f"\n📋 Buscando RNCs para mês={mes}, ano={ano}")
             
-            db = load_data()
-            
-            rncs_filtradas = [r for r in db.get('rncs', []) 
-                             if r['mes'] == mes and r['ano'] == ano]
+            rncs_filtradas = RNC.query.filter_by(mes=mes, ano=ano).all()
             print(f"✅ Encontradas {len(rncs_filtradas)} RNCs")
             
-            return jsonify(rncs_filtradas)
+            return jsonify([r.to_dict() for r in rncs_filtradas])
         except Exception as e:
             print(f"❌ Erro ao buscar RNCs: {e}")
             traceback.print_exc()
@@ -440,93 +422,59 @@ def update_rnc(id):
         data = request.json
         print(f"Dados recebidos: {json.dumps(data, indent=2, ensure_ascii=False)}")
         
-        db = load_data()
-        print(f"Banco de dados carregado. Total RNCs: {len(db.get('rncs', []))}")
-        
-        encontrou = False
-        for i, rnc in enumerate(db.get('rncs', [])):
-            # CORREÇÃO: Usar .get() para evitar KeyError
-            rnc_id = rnc.get('id')
-            print(f"Comparando ID: {rnc_id} com {id}")
-            
-            if rnc_id == id:
-                print(f"✅ RNC encontrada no índice {i}")
-                
-                # CORREÇÃO: Processar a data corretamente
-                data_rnc = data['data_rnc']
-                if 'T' in data_rnc:
-                    data_rnc = data_rnc.split('T')[0]
-                
-                # Extrair mês e ano da data se não fornecidos
-                if 'mes' not in data or 'ano' not in data:
-                    data_parts = data_rnc.split('-')
-                    mes = int(data_parts[1])
-                    ano = int(data_parts[0])
-                else:
-                    mes = int(data['mes'])
-                    ano = int(data['ano'])
-                
-                # CORREÇÃO: Criar nova RNC mantendo o ID e expansões
-                nova_rnc = {
-                    'id': rnc['id'],  # Manter o ID original
-                    'banco': data['banco'],
-                    'empresa': data.get('empresa', ''),
-                    'data_rnc': data_rnc,  # Data processada
-                    'documento': data['documento'],
-                    'valor': float(data['valor']),
-                    'pessoa': data['pessoa'],
-                    'tipo': data['tipo'],
-                    'motivo': data['motivo'],
-                    'correcao': data['correcao'],
-                    'mes': mes,
-                    'ano': ano,
-                    'expansoes': rnc.get('expansoes', []),  # Preservar expansões
-                    'data_registro': rnc.get('data_registro', datetime.now().isoformat())
-                }
-                
-                db['rncs'][i] = nova_rnc
-                encontrou = True
-                print("✅ RNC atualizada em memória")
-                break
-        
-        if not encontrou:
-            print(f"❌ RNC com ID {id} não encontrada")
+        rnc = RNC.query.get(id)
+        if not rnc:
             return jsonify({'error': 'RNC não encontrada'}), 404
         
-        if save_data(db):
-            print("✅ Dados salvos com sucesso!")
-            return jsonify({'success': True, 'id': id})
+        data_rnc = data['data_rnc']
+        if 'T' in data_rnc:
+            data_rnc = data_rnc.split('T')[0]
+        
+        if 'mes' not in data or 'ano' not in data:
+            data_parts = data_rnc.split('-')
+            mes = int(data_parts[1])
+            ano = int(data_parts[0])
         else:
-            print("❌ Erro ao salvar dados")
-            return jsonify({'error': 'Erro ao salvar dados'}), 500
+            mes = int(data['mes'])
+            ano = int(data['ano'])
+        
+        rnc.banco = data['banco']
+        rnc.empresa = data.get('empresa', '')
+        rnc.data_rnc = data_rnc
+        rnc.documento = data['documento']
+        rnc.valor = float(data['valor'])
+        rnc.pessoa = data['pessoa']
+        rnc.tipo = data['tipo']
+        rnc.motivo = data['motivo']
+        rnc.correcao = data['correcao']
+        rnc.mes = mes
+        rnc.ano = ano
+        
+        db.session.commit()
+        print("✅ RNC atualizada com sucesso!")
+        return jsonify({'success': True, 'id': id})
             
     except Exception as e:
+        db.session.rollback()
         print(f"❌ Erro ao atualizar RNC: {e}")
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
-# ========== ROTA DELETE PARA RNC (ADICIONADA) ==========
 @app.route('/api/rncs/<id>', methods=['DELETE'])
 def delete_rnc(id):
     try:
         print(f"\n🗑️ Deletando RNC ID: {id}")
-        db = load_data()
-        
-        # Encontrar e remover a RNC
-        rncs_anteriores = len(db.get('rncs', []))
-        db['rncs'] = [r for r in db.get('rncs', []) if r.get('id') != id]
-        rncs_removidas = rncs_anteriores - len(db['rncs'])
-        
-        if rncs_removidas == 0:
+        rnc = RNC.query.get(id)
+        if not rnc:
             return jsonify({'error': 'RNC não encontrada'}), 404
         
-        if save_data(db):
-            print(f"✅ RNC {id} deletada com sucesso!")
-            return jsonify({'success': True})
-        else:
-            return jsonify({'error': 'Erro ao salvar dados'}), 500
+        db.session.delete(rnc)
+        db.session.commit()
+        print(f"✅ RNC {id} deletada com sucesso!")
+        return jsonify({'success': True})
             
     except Exception as e:
+        db.session.rollback()
         print(f"❌ Erro ao deletar RNC: {e}")
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
@@ -536,43 +484,39 @@ def add_expansao(id):
     try:
         print(f"\n📝 Adicionando expansão à RNC ID: {id}")
         data = request.json
-        db = load_data()
         
-        encontrou = False
-        for rnc in db.get('rncs', []):
-            if rnc.get('id') == id:
-                if 'expansoes' not in rnc:
-                    rnc['expansoes'] = []
-                
-                nova_expansao = {
-                    'id': str(int(datetime.now().timestamp() * 1000)),
-                    'solicitacao': data.get('solicitacao', ''),
-                    'data_sol': data.get('data_sol'),
-                    'setor': data.get('setor', ''),
-                    'data_dev': data.get('data_dev'),
-                    'devolutiva': data.get('devolutiva', ''),
-                    'status': data.get('status', 'Pendente')
-                }
-                rnc['expansoes'].append(nova_expansao)
-                encontrou = True
-                print(f"✅ Expansão adicionada: {nova_expansao['id']}")
-                break
-        
-        if not encontrou:
+        rnc = RNC.query.get(id)
+        if not rnc:
             return jsonify({'error': 'RNC não encontrada'}), 404
         
-        if save_data(db):
-            return jsonify({'success': True})
-        else:
-            return jsonify({'error': 'Erro ao salvar dados'}), 500
+        if not rnc.expansoes:
+            rnc.expansoes = []
+        
+        nova_expansao = {
+            'id': str(int(datetime.now().timestamp() * 1000)),
+            'solicitacao': data.get('solicitacao', ''),
+            'data_sol': data.get('data_sol'),
+            'setor': data.get('setor', ''),
+            'data_dev': data.get('data_dev'),
+            'devolutiva': data.get('devolutiva', ''),
+            'status': data.get('status', 'Pendente')
+        }
+        
+        expansoes_atuais = rnc.expansoes if rnc.expansoes else []
+        novas_expansoes = expansoes_atuais + [nova_expansao]
+        rnc.expansoes = novas_expansoes
+        
+        db.session.commit()
+        print(f"✅ Expansão adicionada: {nova_expansao['id']}")
+        return jsonify({'success': True})
             
     except Exception as e:
+        db.session.rollback()
         print(f"❌ Erro ao adicionar expansão: {e}")
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 # ==================== ROTAS DE EXTRATOS ====================
-
 @app.route('/api/extratos/upload', methods=['POST'])
 def upload_extratos():
     try:
@@ -583,7 +527,6 @@ def upload_extratos():
         mes = request.form.get('mes')
         ano = request.form.get('ano')
         
-        # Usar o mês com dois dígitos para a pasta
         mes_pasta = f"{int(mes):02d}"
         pasta_destino = os.path.join(EXTRATOS_FOLDER, ano, mes_pasta)
         os.makedirs(pasta_destino, exist_ok=True)
@@ -631,7 +574,6 @@ def listar_extratos():
         return jsonify([]), 200
 
 # ==================== ROTA DE PDF ====================
-
 @app.route('/api/gerar-pdf', methods=['GET'])
 def gerar_pdf():
     try:
@@ -640,15 +582,13 @@ def gerar_pdf():
         
         print(f"\n📄 Gerando PDF para {mes:02d}/{ano}")
         
-        db = load_data()
-        saldos = [s for s in db.get('saldos', []) if s['mes'] == mes and s['ano'] == ano]
-        rncs = [r for r in db.get('rncs', []) if r['mes'] == mes and r['ano'] == ano]
+        saldos = Saldo.query.filter_by(mes=mes, ano=ano).all()
+        rncs = RNC.query.filter_by(mes=mes, ano=ano).all()
         
         print(f"📊 Saldos: {len(saldos)}, RNCs: {len(rncs)}")
         
         buffer = io.BytesIO()
         
-        # Usar orientação landscape
         doc = SimpleDocTemplate(
             buffer, 
             pagesize=landscape(A4),
@@ -661,23 +601,16 @@ def gerar_pdf():
         elements = []
         styles = criar_estilos_pdf()
         
-        # Adicionar logo se existir
+        # Logo
         logo_path = os.path.join(os.path.dirname(__file__), 'logo.png')
         if os.path.exists(logo_path):
             try:
-                # Definir tamanho máximo para a logo (100mm de largura)
                 max_width = 100*mm
-                
-                # Obter dimensões originais para manter proporção
                 img = ImageReader(logo_path)
                 img_width, img_height = img.getSize()
-                
-                # Calcular altura proporcional
                 scale = max_width / img_width
                 new_width = max_width
                 new_height = img_height * scale
-                
-                # Limitar altura máxima se necessário
                 max_height = 30*mm
                 if new_height > max_height:
                     scale = max_height / new_height
@@ -685,10 +618,9 @@ def gerar_pdf():
                     new_height = max_height
                 
                 logo = Image(logo_path, width=new_width, height=new_height)
-                logo.hAlign = 'LEFT'  # Alinhar à esquerda
+                logo.hAlign = 'LEFT'
                 elements.append(logo)
                 elements.append(Spacer(1, 5))
-                print(f"✅ Logo redimensionada: {new_width/mm:.1f}mm x {new_height/mm:.1f}mm")
             except Exception as e:
                 print(f"⚠️ Erro ao carregar logo: {e}")
         
@@ -724,7 +656,6 @@ def gerar_pdf():
         return jsonify({'error': str(e)}), 500
 
 # ==================== ROTA DE ZIP ====================
-
 @app.route('/api/gerar-zip', methods=['GET'])
 def gerar_zip():
     try:
@@ -739,7 +670,6 @@ def gerar_zip():
         memory_file = io.BytesIO()
         
         with zipfile.ZipFile(memory_file, 'w') as zf:
-            # Adicionar extratos se existirem
             if pasta_extratos and os.path.exists(pasta_extratos):
                 extratos_adicionados = False
                 for root, dirs, files in os.walk(pasta_extratos):
@@ -758,16 +688,14 @@ def gerar_zip():
                 zf.writestr('extratos/LEIA-ME.txt', readme_content)
             
             # Gerar PDF
-            db = load_data()
             mes_int = int(mes) if mes else 1
             ano_int = int(ano) if ano else 2026
             
-            saldos = [s for s in db.get('saldos', []) if s['mes'] == mes_int and s['ano'] == ano_int]
-            rncs = [r for r in db.get('rncs', []) if r['mes'] == mes_int and r['ano'] == ano_int]
+            saldos = Saldo.query.filter_by(mes=mes_int, ano=ano_int).all()
+            rncs = RNC.query.filter_by(mes=mes_int, ano=ano_int).all()
             
             pdf_buffer = io.BytesIO()
             
-            # Usar orientação landscape
             doc = SimpleDocTemplate(
                 pdf_buffer, 
                 pagesize=landscape(A4),
@@ -780,23 +708,16 @@ def gerar_zip():
             elements = []
             styles = criar_estilos_pdf()
             
-            # Adicionar logo se existir
+            # Logo
             logo_path = os.path.join(os.path.dirname(__file__), 'logo.png')
             if os.path.exists(logo_path):
                 try:
-                    # Definir tamanho máximo para a logo (100mm de largura)
                     max_width = 100*mm
-                    
-                    # Obter dimensões originais para manter proporção
                     img = ImageReader(logo_path)
                     img_width, img_height = img.getSize()
-                    
-                    # Calcular altura proporcional
                     scale = max_width / img_width
                     new_width = max_width
                     new_height = img_height * scale
-                    
-                    # Limitar altura máxima se necessário
                     max_height = 30*mm
                     if new_height > max_height:
                         scale = max_height / new_height
@@ -804,7 +725,7 @@ def gerar_zip():
                         new_height = max_height
                     
                     logo = Image(logo_path, width=new_width, height=new_height)
-                    logo.hAlign = 'LEFT'  # Alinhar à esquerda
+                    logo.hAlign = 'LEFT'
                     elements.append(logo)
                     elements.append(Spacer(1, 5))
                 except Exception as e:
@@ -851,9 +772,7 @@ if __name__ == '__main__':
     print("\n" + "="*60)
     print("🚀 SISTEMA DE CONCILIAÇÃO BANCÁRIA")
     print("="*60)
-    print(f"📁 DATA_FILE: {DATA_FILE}")
     print(f"📁 EXTRATOS_FOLDER: {EXTRATOS_FOLDER}")
-    print(f"📁 O arquivo data.json existe? {os.path.exists(DATA_FILE)}")
     print("="*60)
     print("🌐 Servidor iniciado em: http://localhost:5000")
     print("🛑 Pressione CTRL+C para parar")
