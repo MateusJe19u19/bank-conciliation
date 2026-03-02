@@ -217,6 +217,7 @@ async function carregarRNCs() {
                 <td class="action-cell">
                     <button class="edit-btn" onclick="event.stopPropagation(); editarRNC('${rnc.id}')">✏️ Editar</button>
                     <button class="expand-btn" onclick="event.stopPropagation(); abrirModalExpansao('${rnc.id}')">📋 Expansões</button>
+                    <button class="delete-btn" onclick="event.stopPropagation(); deletarRNC('${rnc.id}')">🗑️ Excluir</button>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -359,6 +360,27 @@ async function deletarExpansao(rncId, expId) {
     } catch (error) {
         console.error('Erro ao deletar expansão:', error);
         alert('Erro ao excluir registro. Tente novamente.');
+    }
+}
+
+// Função para deletar RNC
+async function deletarRNC(id) {
+    if (!confirm('Tem certeza que deseja excluir esta RNC?')) return;
+    
+    try {
+        const response = await fetch(`/api/rncs/${id}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            alert('RNC excluída com sucesso!');
+            carregarRNCs(); // Recarrega a lista
+        } else {
+            alert('Erro ao excluir RNC');
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+        alert('Erro ao excluir RNC');
     }
 }
 
